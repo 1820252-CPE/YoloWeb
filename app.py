@@ -1,32 +1,62 @@
 from flask import Flask, render_template, Response, jsonify, request
+from flask_mysqldb import MySQL
 from ultralytics import YOLO
 import cv2
-
-from transformers import BertForQuestionAnswering, BertTokenizer
-from transformers import pipeline
-import textwrap
+from transformers import BertForQuestionAnswering, BertTokenizer, pipeline
 
 app = Flask(__name__)
 
-# Load YOLO model
-yolo_model = YOLO("C:\\Users\\cdomi\\OneDrive\\Desktop\\Webapp\\customdatasetsemi.pt")
+app.config['MYSQL_HOST'] = "localhost"
+app.config['MYSQL_USER'] = "root"
+app.config['MYSQL_PASSWORD'] = ""
+app.config['MYSQL_DB'] = "detection"
+app.config['MYSQL_CURSORCLASS'] = 'DictCursor'
 
-# Open camera
-cap = cv2.VideoCapture(0)
+mysql = MySQL(app)
 
-# Load BERT model for question answering
+yolo_model = None
+cap = None
+
 bert_model = BertForQuestionAnswering.from_pretrained('deepset/bert-base-cased-squad2')
 bert_tokenizer = BertTokenizer.from_pretrained('deepset/bert-base-cased-squad2')
 bert_qna = pipeline('question-answering', model=bert_model, tokenizer=bert_tokenizer)
 
-# Read context from a text file
 context_path = 'C:\\Users\\cdomi\\OneDrive\\Desktop\\Webapp\\templates\\context.txt'
 with open(context_path, 'r', encoding='utf-8') as context_file:
     context = context_file.read()
 
-@app.route('/')
-def index():
-    return render_template('index.html')
+def initialize_yolo_and_camera():
+    global yolo_model, cap
+    yolo_model = YOLO("C:\\Users\\cdomi\\OneDrive\\Desktop\\Webapp\\customdatasetsemi.pt")
+    cap = cv2.VideoCapture(0)
+
+if __name__ == '__main__':
+    initialize_yolo_and_camera()
+
+    with app.app_context():
+        with mysql.connection.cursor() as cursor:
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS detection_data (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    object_type VARCHAR(255) NOT NULL,
+                    count INT DEFAULT 0,
+                    UNIQUE KEY (object_type)
+                )
+                """
+            )
+            mysql.connection.commit()
+
+def insert_detection_count(object_type, count):
+    with app.app_context():
+        cursor = mysql.connection.cursor()
+        cursor.execute(
+            "INSERT INTO detection_data (object_type, count) VALUES (%s, %s) ON DUPLICATE KEY UPDATE count = %s",
+            (object_type, count, count)
+        )
+        mysql.connection.commit()
+        cursor.close()
+        print(f"Inserted count {count} for object type {object_type}")
 
 def generate_frames():
     while True:
@@ -35,6 +65,13 @@ def generate_frames():
             break
         else:
             results = yolo_model.track(frame, persist=True)
+            print("YOLO Results:", results)
+
+            detected_objects = get_detected_objects(results)
+
+            for obj_type in set(detected_objects):
+                obj_count = detected_objects.count(obj_type)
+                insert_detection_count(obj_type, obj_count)
 
             if results and results[0].boxes:
                 frame = results[0].plot()
@@ -51,22 +88,20 @@ def get_detected_objects(results):
         names_attr = results[0].names[0]
 
         if isinstance(names_attr, dict):
-            # Case when 'names' is a dictionary
             for class_id, label in names_attr.items():
-                # Check if the label is an integer
                 if isinstance(label, int):
-                    # If it's an integer, convert it to a string
                     label = str(label)
 
                 detected_objects.append(label)
         elif isinstance(names_attr, str):
-            # Case when 'names' is a string
             detected_objects.append(names_attr)
-
-        print("Full Results:", results)  # Print the full results for further analysis
 
     print("Detected Objects:", detected_objects)
     return detected_objects
+
+@app.route('/')
+def index():
+    return render_template('index.html')
 
 @app.route('/video_feed')
 def video_feed():
@@ -74,14 +109,9 @@ def video_feed():
 
 @app.route('/detect_objects')
 def detect_objects():
-    # Read a new frame from the camera
     ret, frame = cap.read()
-
-    # Get results for the current frame
     results = yolo_model.track(frame, persist=True)
     detected_objects = get_detected_objects(results)
-
-    # Return the detected objects as JSON
     return jsonify({'detected_objects': detected_objects})
 
 @app.route('/answer_question', methods=['POST'])

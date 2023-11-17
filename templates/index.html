@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Brahmmy's Guide</title>
+    <style>
+        body {
+            text-align: center;
+            background-color: #fff6bd;
+            margin: 0;
+        }
+
+        h1 {
+            color: white ;
+        }
+
+        #header {
+            background-color: #5a0101;
+            color: white;
+            padding: 10px;
+        }
+
+        img {
+            max-width: 100%;
+            height: auto;
+        }
+
+        #content {
+            display: flex;
+            justify-content: space-around; 
+            align-items: center;
+            margin-top: 20px; 
+        }
+
+        #leftContent, #rightContent {
+            flex: 1;
+            text-align: center;
+        }
+
+        #objectDetection, #chatBox, #questionAnswering {
+            text-align: left;
+            padding: 20px;
+            border: 1px solid #0d0d0d;
+            background-color: #f6b461; 
+             max-width: 500px;
+            margin: auto; 
+            margin-bottom: 20px; 
+        }
+
+
+        /* Change the color of specific text elements */
+        #questionAnswering h2,
+        #questionAnswering label,
+        #questionAnswering button,
+        #leftContent #objectDetection h2,
+        #rightContent #chatBox h2 {
+            color: #5a0101; 
+        }
+
+        /* Change the button styles */
+        #questionAnswering button {
+            background-color: #5a0101; 
+            color: #fff6bd; 
+            padding: 10px 20px; 
+            border: none;
+            border-radius: 5px; 
+            cursor: pointer;
+        }
+            #detectButton {
+        background-color: #5a0101; 
+        color: #fff6bd; 
+        padding: 10px 20px; 
+        border: none;
+        border-radius: 5px; 
+        cursor: pointer;
+    
+        }
+    </style>
+</head>
+<body>
+    <div id="header">
+        <h1>Brahmmys's Object Detection</h1>
+    </div>
+
+    <div id="content">
+        <div id="leftContent">
+            <!-- Object Detection Section -->
+            <div id="objectDetection">
+                <h2>Brahmmy's Lens</h2>
+                <img id="liveCamera" src="{{ url_for('video_feed') }}" alt="Object Detection">
+                <button id="detectButton" onclick="detectObjects()">Detect Objects</button>
+            </div>
+
+            <!-- Chat Box Section -->
+            <div id="chatBox">
+                <div id="loadingIndicator" style="display: none;">Loading...</div>
+            </div>
+        </div>
+
+        <div id="rightContent">
+            <!-- Question Answering Section -->
+            <div id="questionAnswering">
+                <h2>Ask Brahmmy</h2>
+                <form method="post" action="/answer_question">
+                    <label for="question">Please enter your question:</label>
+                    <input type="text" name="question" required>
+                    <button type="submit">Submit</button>
+                </form>
+
+                {% if inquiry %}
+                    <h3>Your Question:</h3>
+                    <p>{{ inquiry }}</p>
+
+                    <h3>Answer:</h3>
+                    <p>{{ answer_info.answer }}</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function detectObjects() {
+            // Pause the video feed temporarily
+            document.getElementById('liveCamera').src = '';
+
+            // Send a request to the server to get detected objects
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', '/detect_objects', true);
+            xhr.onreadystatechange = function() {
+                if (xhr.readyState == 4 && xhr.status == 200) {
+                    var response = JSON.parse(xhr.responseText);
+                    displayDetectedObjects(response.detected_objects);
+
+                    // Resume the video feed
+                    document.getElementById('liveCamera').src = "{{ url_for('video_feed') }}";
+                }
+            };
+            xhr.send();
+        }
+
+        function displayDetectedObjects(detectedObjects) {
+            // Clear the existing content of the chat box
+            var chatBox = document.getElementById('chatBox');
+            chatBox.innerHTML = '';
+
+            // Display detected objects
+            chatBox.innerHTML += '<h3>Detected Objects:</h3>';
+            for (var i = 0; i < detectedObjects.length; i++) {
+                chatBox.innerHTML += '<p>' + detectedObjects[i] + '</p>';
+            }
+        }
+    </script>
+</body>
+</html>
