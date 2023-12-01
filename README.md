@@ -3,6 +3,7 @@
 Installation Instructions:
 
 The steps followed by the developers
+
 Step 1: Dataset gathering 
  1. Browsed Google and Roboflow for gathering the images for training the custom data set
  2. Create a main folder. On the main folder of datasets create two sub folders named: images and labels. Inside of those folders create two folders named: train and val.
